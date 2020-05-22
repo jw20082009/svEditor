@@ -1,18 +1,17 @@
 package com.wilbert.sveditor;
 
-import androidx.appcompat.app.AppCompatActivity;
-
 import android.content.Context;
 import android.content.Intent;
 import android.opengl.GLSurfaceView;
 import android.os.Bundle;
+import android.support.v7.app.AppCompatActivity;
 import android.view.View;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
-import com.wilbert.sveditor.contexts.SvPlayer;
-import com.wilbert.sveditor.contexts.abs.IPlayer;
-import com.wilbert.sveditor.contexts.abs.IPrepareListener;
+import com.wilbert.sveditor.library.contexts.SvPlayer;
+import com.wilbert.sveditor.library.contexts.abs.IPlayer;
+import com.wilbert.sveditor.library.contexts.abs.IPrepareListener;
 
 public class EditActivity extends AppCompatActivity implements View.OnClickListener {
 

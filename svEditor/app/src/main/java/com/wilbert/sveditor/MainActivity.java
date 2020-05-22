@@ -1,18 +1,17 @@
 package com.wilbert.sveditor;
 
-import androidx.appcompat.app.AppCompatActivity;
-
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 
-import com.wilbert.sveditor.utils.FileUtils;
+import com.wilbert.sveditor.library.utils.FileUtils;
 
 import java.io.File;
 
@@ -43,7 +42,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     public void startCompress() {
         if (Build.VERSION.SDK_INT >= 23) {
             if (checkSelfPermission(
-                    Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 if (shouldShowRequestPermissionRationale(
                         Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
                 }
