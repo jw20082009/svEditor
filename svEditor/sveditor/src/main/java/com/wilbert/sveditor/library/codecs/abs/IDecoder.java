@@ -11,7 +11,15 @@ import java.io.IOException;
  * desc   :
  */
 public interface IDecoder {
-    boolean prepare(MediaFormat format) throws IOException;
+
+    int STATUS_RELEASED = 0X00;
+    int STATUS_RELEASING = 0X01;
+    int STATUS_PREPARING = 0X02;
+    int STATUS_PREPARED = 0x03;
+
+    boolean isPrepared();
+
+    boolean prepare(MediaFormat format, Object lock) throws IOException;
 
     InputInfo dequeueInputBuffer();
 

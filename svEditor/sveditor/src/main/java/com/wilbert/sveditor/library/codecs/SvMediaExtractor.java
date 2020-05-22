@@ -3,36 +3,29 @@ package com.wilbert.sveditor.library.codecs;
 import android.media.MediaFormat;
 import android.text.TextUtils;
 
+import com.wilbert.sveditor.library.codecs.abs.IExtractor;
+import com.wilbert.sveditor.library.codecs.abs.IExtractorListener;
 import com.wilbert.sveditor.library.codecs.abs.InputInfo;
 import com.wilbert.sveditor.library.log.ALog;
 
-import java.io.FileDescriptor;
 import java.io.IOException;
 
 /**
- * author : Wilbert
+ * author : wilbert
  * e-mail : jw20082009@qq.com
- * time   : 2020/04/26
+ * time   : 2020/05/22
  * desc   :
  */
-public class SvMediaExtractor {
+public class SvMediaExtractor implements IExtractor {
     private final String TAG = "SvMediaExtractor";
-
-    public enum Type {
-        AUDIO, VIDEO;
-    }
-
-    private final long mIgnoreTimeUs = 40000;//40ms
+    private long mCurrentTimeUs = 0;
+    private boolean mPrepared = false;
     private android.media.MediaExtractor mExtractor;
     private MediaFormat mFormat;
-    private boolean mPrepared = false;
-    private long mCurrentTimeUs = 0;
-    private Type mType;
+    private final long mIgnoreTimeUs = 40000;//40ms
 
-    public SvMediaExtractor() {
-    }
-
-    public boolean prepare(String filepath, Type type) throws IOException {
+    @Override
+    public boolean _prepare(String filepath, SvExtractor.Type type) throws IOException {
         if (TextUtils.isEmpty(filepath)) {
             throw new IOException("cannot prepare empty filepath");
         }
@@ -41,7 +34,7 @@ public class SvMediaExtractor {
         for (int i = 0; i < this.mExtractor.getTrackCount(); ++i) {
             MediaFormat format = this.mExtractor.getTrackFormat(i);
             String mime = format.getString(MediaFormat.KEY_MIME);
-            if ((type == Type.VIDEO && mime.startsWith("video/")) || (type == Type.AUDIO && mime.startsWith("audio/"))) {
+            if ((type == SvExtractor.Type.VIDEO && mime.startsWith("video/")) || (type == SvExtractor.Type.AUDIO && mime.startsWith("audio/"))) {
                 mExtractor.selectTrack(i);
                 mFormat = format;
                 break;
@@ -50,34 +43,15 @@ public class SvMediaExtractor {
         if (mFormat != null) {
             mPrepared = true;
             mCurrentTimeUs = 0;
+        } else {
+            _release();
+            mPrepared = false;
         }
         return mPrepared;
     }
 
-    public boolean prepare(FileDescriptor descriptor, Type type) throws IOException {
-        mExtractor = new android.media.MediaExtractor();
-        mExtractor.setDataSource(descriptor);
-        for (int i = 0; i < this.mExtractor.getTrackCount(); ++i) {
-            MediaFormat format = this.mExtractor.getTrackFormat(i);
-            String mime = format.getString(MediaFormat.KEY_MIME);
-            if ((type == Type.VIDEO && mime.startsWith("video/")) || (type == Type.AUDIO && mime.startsWith("audio/"))) {
-                mExtractor.selectTrack(i);
-                mFormat = format;
-                break;
-            }
-        }
-        if (mFormat != null) {
-            mPrepared = true;
-            mCurrentTimeUs = 0;
-        }
-        return mPrepared;
-    }
-
-    /**
-     * @param buffer
-     * @return 返回当前读取的sampleTime, 当读取到的size<= 0 时为-1
-     */
-    public long fillBuffer(InputInfo buffer) {
+    @Override
+    public long _fillBuffer(InputInfo buffer) {
         if (buffer == null || !mPrepared) {
             ALog.i(TAG, "fillBuffer when " + (buffer == null ? "buffer is null" : "buffer not null") + "; mPrepared:" + mPrepared);
             return -1;
@@ -96,7 +70,8 @@ public class SvMediaExtractor {
         return time;
     }
 
-    public long seekTo(long timeUs) {
+    @Override
+    public long _seekTo(long timeUs) {
         if (!mPrepared || Math.abs(timeUs - mCurrentTimeUs) < mIgnoreTimeUs) {
             return mCurrentTimeUs;
         }
@@ -110,15 +85,8 @@ public class SvMediaExtractor {
         return mCurrentTimeUs;
     }
 
-    public boolean isPrepared() {
-        return mPrepared;
-    }
-
-    public MediaFormat getMediaFormat() {
-        return mFormat;
-    }
-
-    public void release() {
+    @Override
+    public void _release() {
         if (mExtractor != null) {
             mExtractor.release();
             mExtractor = null;

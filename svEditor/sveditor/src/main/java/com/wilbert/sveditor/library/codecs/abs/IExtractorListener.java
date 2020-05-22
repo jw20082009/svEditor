@@ -1,6 +1,6 @@
 package com.wilbert.sveditor.library.codecs.abs;
 
-import com.wilbert.sveditor.library.codecs.SvMediaExtractorWrapper;
+import com.wilbert.sveditor.library.codecs.SvExtractor;
 
 /**
  * author : wilbert
@@ -10,9 +10,9 @@ import com.wilbert.sveditor.library.codecs.SvMediaExtractorWrapper;
  */
 public interface IExtractorListener {
 
-    void onPrepared(SvMediaExtractorWrapper extractor);
+    void onPrepared(SvExtractor extractor);
 
-    void onReleased(SvMediaExtractorWrapper extractor);
+    void onReleased(SvExtractor extractor);
 
-    void onError(SvMediaExtractorWrapper extractor, Throwable throwable);
+    void onError(SvExtractor extractor, Throwable throwable);
 }

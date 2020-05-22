@@ -50,6 +50,11 @@ public class SvMediaDecoder implements IDecoder, IAudioParams, IVideoParams {
     }
 
     @Override
+    public boolean isPrepared() {
+        return mPrepared;
+    }
+
+    @Override
     public boolean prepare(MediaFormat format) throws IOException {
         ALog.i(TAG, "prepare:" + mPrepared);
         if (mPrepared && mDecoder != null) {

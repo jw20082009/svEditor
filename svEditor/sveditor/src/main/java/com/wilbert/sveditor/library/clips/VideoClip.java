@@ -5,7 +5,7 @@ import android.text.TextUtils;
 import com.wilbert.sveditor.library.clips.abs.IFrameWorker;
 import com.wilbert.sveditor.library.clips.abs.IPreparedListener;
 import com.wilbert.sveditor.library.clips.abs.IVideoClip;
-import com.wilbert.sveditor.library.codecs.SvMediaExtractor;
+import com.wilbert.sveditor.library.codecs.SvExtractor;
 import com.wilbert.sveditor.library.codecs.SvMediaExtractorWrapper;
 import com.wilbert.sveditor.library.codecs.abs.FrameInfo;
 import com.wilbert.sveditor.library.codecs.abs.IExtractorListener;
@@ -92,7 +92,7 @@ public class VideoClip implements IVideoClip, IVideoParams, IFrameWorker {
         mFilePath = filePath;
         mExtractor = new SvMediaExtractorWrapper();
         mExtractor.setListener(extractorListener);
-        mExtractor.prepare(mFilePath, SvMediaExtractor.Type.VIDEO);
+        mExtractor.prepare(mFilePath, SvExtractor.Type.VIDEO);
         mStatus.set(STATUS_IDLE);
     }
 

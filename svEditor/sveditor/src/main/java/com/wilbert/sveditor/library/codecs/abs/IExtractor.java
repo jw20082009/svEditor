@@ -1,31 +1,22 @@
 package com.wilbert.sveditor.library.codecs.abs;
 
-import android.media.MediaFormat;
+import com.wilbert.sveditor.library.codecs.SvExtractor;
 
-import com.wilbert.sveditor.library.codecs.SvMediaExtractor;
+import java.io.IOException;
 
 /**
  * author : wilbert
  * e-mail : jw20082009@qq.com
- * time   : 2020/05/09
+ * time   : 2020/05/22
  * desc   :
  */
 public interface IExtractor {
-    void prepare(String filePath, SvMediaExtractor.Type type);
 
-    void start();
+    boolean _prepare(String filepath, SvExtractor.Type type) throws IOException;
 
-    FrameInfo getNextFrameBuffer();
+    long _fillBuffer(InputInfo buffer);
 
-    void releaseFrameBuffer(FrameInfo frameInfo);
+    long _seekTo(long timeUs);
 
-    void seekTo(long timeUs);
-
-    long getDuration();
-
-    MediaFormat getMediaFormat();
-
-    void setListener(IExtractorListener listener);
-
-    void release();
+    void _release();
 }

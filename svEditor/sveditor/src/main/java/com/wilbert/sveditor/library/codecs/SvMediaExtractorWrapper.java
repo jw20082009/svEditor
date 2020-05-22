@@ -5,14 +5,12 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
-import android.text.TextUtils;
 
 import com.wilbert.sveditor.library.codecs.abs.FrameInfo;
 import com.wilbert.sveditor.library.codecs.abs.IAudioParams;
-import com.wilbert.sveditor.library.codecs.abs.IExtractor;
+import com.wilbert.sveditor.library.codecs.abs.IMediaExtractor;
 import com.wilbert.sveditor.library.codecs.abs.IExtractorListener;
 import com.wilbert.sveditor.library.codecs.abs.IVideoParams;
-import com.wilbert.sveditor.library.codecs.abs.InputInfo;
 
 import java.io.IOException;
 import java.util.concurrent.Semaphore;
@@ -24,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * time   : 2020/04/26
  * desc   :
  */
-public class SvMediaExtractorWrapper implements IExtractor, IAudioParams, IVideoParams {
+public class SvMediaExtractorWrapper implements IMediaExtractor, IAudioParams, IVideoParams {
     private final String TAG = "SvMediaExtractorWrapper";
 
     public static int STATUS_RELEASED = 0x00;
@@ -38,9 +36,6 @@ public class SvMediaExtractorWrapper implements IExtractor, IAudioParams, IVideo
 
     private AtomicInteger mStatus = new AtomicInteger(STATUS_RELEASED);
 
-    private SvMediaExtractor mExtractor;
-    private MediaFormat mFormat;
-    private ExtractorHandler mHandler;
     private DecodeHandler mDecodeHandler;
     private IExtractorListener mListener;
     private String mFilePath = null;
@@ -55,24 +50,25 @@ public class SvMediaExtractorWrapper implements IExtractor, IAudioParams, IVideo
     private long mDuration = 0;
 
     private SvMediaDecoder mDecoder;
+    private SvExtractor mExtractor;
     private Semaphore mReleasePhore = new Semaphore(2);
     private Semaphore mDecodePhore = new Semaphore(0);
     private Object mLock = new Object();
 
     public SvMediaExtractorWrapper() {
+        mExtractor = new SvExtractor();
+        mExtractor.setExtractorListener(mExtractorListener);
+        mDecoder = new SvMediaDecoder();
     }
 
     @Override
-    public void prepare(String filePath, SvMediaExtractor.Type type) {
+    public void prepare(String filePath, SvExtractor.Type type) {
         if (mStatus.get() >= STATUS_PREPARING)
             return;
         mStatus.set(STATUS_PREPARING);
         initHandler();
         mFilePath = filePath;
-        mHandler.removeMessages(MSG_PREPARE_EXTRACTOR);
-        Message prepareMessage = mHandler.obtainMessage(MSG_PREPARE_EXTRACTOR);
-        prepareMessage.obj = type;
-        prepareMessage.sendToTarget();
+        mExtractor.prepare(filePath, type);
         mDecodeHandler.removeMessages(MSG_PREPARE_DECODER);
         Message decodeMessage = mDecodeHandler.obtainMessage(MSG_PREPARE_DECODER);
         decodeMessage.sendToTarget();
@@ -184,18 +180,16 @@ public class SvMediaExtractorWrapper implements IExtractor, IAudioParams, IVideo
 
     @Override
     public void release() {
-        if (mStatus.get() < STATUS_RELEASING)
+        if (mStatus.get() <= STATUS_RELEASING)
             return;
         mStatus.set(STATUS_RELEASING);
-        mHandler.release();
+        mDecoder.queueInputBuffer(null);
+        mDecoder.queueOutputBuffer(null);
         mDecodeHandler.release();
     }
 
     private void initHandler() {
-        if (mHandler == null) {
-            HandlerThread thread = new HandlerThread("VideoExtractorWrapper[" + hashCode() + "]");
-            thread.start();
-            mHandler = new ExtractorHandler(thread.getLooper());
+        if (mDecodeHandler == null) {
             HandlerThread thread1 = new HandlerThread("VideoDecoder[" + hashCode() + "]");
             thread1.start();
             mDecodeHandler = new DecodeHandler(thread1.getLooper());
@@ -213,12 +207,6 @@ public class SvMediaExtractorWrapper implements IExtractor, IAudioParams, IVideo
             }
         }
     }
-
-    private final int MSG_PREPARE_EXTRACTOR = 0x01;
-    private final int MSG_FEED_BUFFER = 0x02;
-    private final int MSG_SEEK = 0x03;
-
-    private boolean firstFrame = true;
 
     @Override
     public int getBitrate() {
@@ -247,103 +235,6 @@ public class SvMediaExtractorWrapper implements IExtractor, IAudioParams, IVideo
         return result > 0 ? result : mChannelCount;
     }
 
-    class ExtractorHandler extends Handler {
-
-        public ExtractorHandler(Looper looper) {
-            super(looper);
-        }
-
-        @Override
-        public void handleMessage(Message msg) {
-            super.handleMessage(msg);
-            switch (msg.what) {
-                case MSG_PREPARE_EXTRACTOR:
-                    if (mExtractor != null) {
-                        mExtractor.release();
-                    }
-                    try {
-                        mExtractor = new SvMediaExtractor();
-                        mStatus.set(STATUS_PREPARING_EXTRACTOR);
-                        if (!TextUtils.isEmpty(mFilePath)) {
-                            mExtractor.prepare(mFilePath, (SvMediaExtractor.Type) msg.obj);
-                        } else {
-                            return;
-                        }
-                        try {
-                            synchronized (mLock) {
-                                mFormat = mExtractor.getMediaFormat();
-                                if (mFormat != null) {
-                                    if (mFormat.containsKey(MediaFormat.KEY_WIDTH))
-                                        mWidth = mFormat.getInteger(MediaFormat.KEY_WIDTH);
-                                    if (mFormat.containsKey(MediaFormat.KEY_HEIGHT))
-                                        mHeight = mFormat.getInteger(MediaFormat.KEY_HEIGHT);
-                                    if (mFormat.containsKey(MediaFormat.KEY_ROTATION))
-                                        mRotation = mFormat.getInteger(MediaFormat.KEY_ROTATION);
-                                    if (mFormat.containsKey(MediaFormat.KEY_CHANNEL_COUNT))
-                                        mChannelCount = mFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
-                                    if (mFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE))
-                                        mSampleRate = mFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE);
-                                    if (mFormat.containsKey(MediaFormat.KEY_FRAME_RATE))
-                                        mFps = mFormat.getInteger(MediaFormat.KEY_FRAME_RATE);
-                                    if (mFormat.containsKey(MediaFormat.KEY_BIT_RATE))
-                                        mBitRate = mFormat.getInteger(MediaFormat.KEY_BIT_RATE);
-                                    if (mFormat.containsKey(MediaFormat.KEY_DURATION))
-                                        mDuration = mFormat.getLong(MediaFormat.KEY_DURATION);
-                                }
-                            }
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                        mDecodePhore.release(1);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        notifyonError(e);
-                    }
-                    break;
-                case MSG_FEED_BUFFER:
-                    if (mStatus.get() < STATUS_PREPARED)
-                        break;
-                    if (firstFrame) {
-                        firstFrame = false;
-                    }
-                    InputInfo inputInfo = mDecoder.dequeueInputBuffer();
-                    if (inputInfo != null && inputInfo.buffer != null) {
-                        long time = mExtractor.fillBuffer(inputInfo);
-                        inputInfo.lastFrameFlag = time == -1 ? true : false;
-                        mDecoder.queueInputBuffer(inputInfo);
-                    }
-                    if (mStatus.get() >= STATUS_PREPARED) {
-                        sendEmptyMessage(MSG_FEED_BUFFER);
-                    }
-                    break;
-                case MSG_SEEK: {
-                    if (mStatus.get() < STATUS_PREPARED) {
-                        break;
-                    }
-                    Object tag = msg.obj;
-                    long seekTimeUs = 0;
-                    if (tag != null) {
-                        seekTimeUs = (long) tag;
-                    }
-                    mExtractor.seekTo(seekTimeUs);
-                    mDecoder.flush();
-                }
-                break;
-            }
-        }
-
-        public void release() {
-            mDecoder.queueInputBuffer(null);
-            mDecoder.queueOutputBuffer(null);
-            post(new Runnable() {
-                @Override
-                public void run() {
-                    _release();
-                    getLooper().quit();
-                }
-            });
-        }
-    }
 
     private final int MSG_PREPARE_DECODER = 0x01;
 
@@ -413,6 +304,50 @@ public class SvMediaExtractorWrapper implements IExtractor, IAudioParams, IVideo
         synchronized (mLock) {
             if (mListener != null) {
                 mListener.onReleased(SvMediaExtractorWrapper.this);
+            }
+        }
+    }
+
+    IExtractorListener mExtractorListener = new IExtractorListener() {
+        @Override
+        public void onPrepared(SvExtractor extractor) {
+            initParams(extractor.getMediaFormat());
+            mDecodePhore.release(1);
+        }
+
+        @Override
+        public void onReleased(SvExtractor extractor) {
+
+        }
+
+        @Override
+        public void onError(SvExtractor extractor, Throwable throwable) {
+
+        }
+    };
+
+    private void initParams(MediaFormat format) {
+        synchronized (mLock) {
+            if (format == null)
+                return;
+            format = mExtractor.getMediaFormat();
+            if (format != null) {
+                if (format.containsKey(MediaFormat.KEY_WIDTH))
+                    mWidth = format.getInteger(MediaFormat.KEY_WIDTH);
+                if (format.containsKey(MediaFormat.KEY_HEIGHT))
+                    mHeight = format.getInteger(MediaFormat.KEY_HEIGHT);
+                if (format.containsKey(MediaFormat.KEY_ROTATION))
+                    mRotation = format.getInteger(MediaFormat.KEY_ROTATION);
+                if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT))
+                    mChannelCount = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
+                if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE))
+                    mSampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE);
+                if (format.containsKey(MediaFormat.KEY_FRAME_RATE))
+                    mFps = format.getInteger(MediaFormat.KEY_FRAME_RATE);
+                if (format.containsKey(MediaFormat.KEY_BIT_RATE))
+                    mBitRate = format.getInteger(MediaFormat.KEY_BIT_RATE);
+                if (format.containsKey(MediaFormat.KEY_DURATION))
+                    mDuration = format.getLong(MediaFormat.KEY_DURATION);
             }
         }
     }
