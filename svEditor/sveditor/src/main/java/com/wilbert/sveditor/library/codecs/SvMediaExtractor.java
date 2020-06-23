@@ -19,13 +19,12 @@ import java.io.IOException;
 public class SvMediaExtractor implements IExtractor {
     private final String TAG = "SvMediaExtractor";
     private long mCurrentTimeUs = 0;
-    private boolean mPrepared = false;
     private android.media.MediaExtractor mExtractor;
     private MediaFormat mFormat;
     private final long mIgnoreTimeUs = 40000;//40ms
 
     @Override
-    public boolean _prepare(String filepath, SvExtractor.Type type) throws IOException {
+    public MediaFormat _prepare(String filepath, SvExtractor.Type type) throws IOException {
         if (TextUtils.isEmpty(filepath)) {
             throw new IOException("cannot prepare empty filepath");
         }
@@ -41,19 +40,17 @@ public class SvMediaExtractor implements IExtractor {
             }
         }
         if (mFormat != null) {
-            mPrepared = true;
             mCurrentTimeUs = 0;
         } else {
             _release();
-            mPrepared = false;
         }
-        return mPrepared;
+        return mFormat;
     }
 
     @Override
     public long _fillBuffer(InputInfo buffer) {
-        if (buffer == null || !mPrepared) {
-            ALog.i(TAG, "fillBuffer when " + (buffer == null ? "buffer is null" : "buffer not null") + "; mPrepared:" + mPrepared);
+        if (buffer == null || mFormat == null) {
+            ALog.i(TAG, "fillBuffer when " + (buffer == null ? "buffer is null" : "buffer not null") + "; mPrepared:" + (mFormat != null));
             return -1;
         }
         int size = mExtractor.readSampleData(buffer.buffer, 0);
@@ -72,7 +69,7 @@ public class SvMediaExtractor implements IExtractor {
 
     @Override
     public long _seekTo(long timeUs) {
-        if (!mPrepared || Math.abs(timeUs - mCurrentTimeUs) < mIgnoreTimeUs) {
+        if (mFormat == null || Math.abs(timeUs - mCurrentTimeUs) < mIgnoreTimeUs) {
             return mCurrentTimeUs;
         }
         long time = mCurrentTimeUs;
@@ -86,11 +83,16 @@ public class SvMediaExtractor implements IExtractor {
     }
 
     @Override
+    public boolean isPrepared() {
+        return mFormat != null;
+    }
+
+    @Override
     public void _release() {
         if (mExtractor != null) {
             mExtractor.release();
             mExtractor = null;
-            mPrepared = false;
+            mFormat = null;
         }
     }
 }

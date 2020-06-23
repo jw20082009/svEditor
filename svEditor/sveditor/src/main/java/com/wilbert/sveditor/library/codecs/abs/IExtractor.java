@@ -1,5 +1,7 @@
 package com.wilbert.sveditor.library.codecs.abs;
 
+import android.media.MediaFormat;
+
 import com.wilbert.sveditor.library.codecs.SvExtractor;
 
 import java.io.IOException;
@@ -12,11 +14,13 @@ import java.io.IOException;
  */
 public interface IExtractor {
 
-    boolean _prepare(String filepath, SvExtractor.Type type) throws IOException;
+    MediaFormat _prepare(String filepath, SvExtractor.Type type) throws IOException;
 
     long _fillBuffer(InputInfo buffer);
 
     long _seekTo(long timeUs);
+
+    boolean isPrepared();
 
     void _release();
 }

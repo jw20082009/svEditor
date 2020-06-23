@@ -19,16 +19,13 @@ import java.util.concurrent.LinkedBlockingDeque;
  * time   : 2020/04/26
  * desc   :
  */
-public class SvMediaDecoder implements IDecoder, IAudioParams, IVideoParams {
+public class SvMediaDecoder implements IAudioParams, IVideoParams {
     private final String TAG = "SvMediaDecoder";
     private MediaCodec mDecoder;
     private boolean mPrepared = false;
     private MediaFormat mInputFormat;
     private MediaFormat mOutputFormat;
-    private InputInfo mCurrentInputInfo = null;
-    private FrameInfo mCurrentFrameInfo = null;
-    private LinkedBlockingDeque<InputInfo> mInputBuffers = new LinkedBlockingDeque<>(10);
-    private LinkedBlockingDeque<FrameInfo> mOutputBuffers = new LinkedBlockingDeque<>(10);
+
     private int mType = 0;//0:video;1:audio;
     private int mFps = 0;
     private int mBitRate = 0;
@@ -45,16 +42,16 @@ public class SvMediaDecoder implements IDecoder, IAudioParams, IVideoParams {
      * #BUFFER_FLAG_CODEC_CONFIG after such flush to ensure proper codec operation.
      */
     private boolean mFlushEnable = false;
+    private SvDecoder mCounsumer;
 
-    public SvMediaDecoder() {
+    public SvMediaDecoder(SvDecoder handle) {
+        mCounsumer = handle;
     }
 
-    @Override
     public boolean isPrepared() {
         return mPrepared;
     }
 
-    @Override
     public boolean prepare(MediaFormat format) throws IOException {
         ALog.i(TAG, "prepare:" + mPrepared);
         if (mPrepared && mDecoder != null) {
@@ -80,14 +77,9 @@ public class SvMediaDecoder implements IDecoder, IAudioParams, IVideoParams {
         return mPrepared = true;
     }
 
-    @Override
     public boolean flush() {
         ALog.i(TAG, "flush");
         if (mFlushEnable) {
-            mCurrentInputInfo = null;
-            mCurrentFrameInfo = null;
-            mInputBuffers.clear();
-            mOutputBuffers.clear();
             mDecoder.flush();
             mDecoder.start();
             mFlushEnable = false;
@@ -96,7 +88,6 @@ public class SvMediaDecoder implements IDecoder, IAudioParams, IVideoParams {
         return false;
     }
 
-    @Override
     public void release() {
         ALog.i(TAG, "release");
         if (mDecoder != null) {
@@ -109,76 +100,19 @@ public class SvMediaDecoder implements IDecoder, IAudioParams, IVideoParams {
         }
     }
 
-    @Override
-    public InputInfo dequeueInputBuffer() {
-        if (mDecoder == null) {
-            return null;
-        }
-        if (mCurrentInputInfo != null) {
-            //保证外部必须先返回上一个buffer,才能取走下一个buffer
-            //ALog.i(TAG, "dequeueInputBuffer same frame again");
-            return null;
-        }
-        try {
-            mCurrentInputInfo = mInputBuffers.takeLast();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-        //if (mCurrentInputInfo != null) {
-        //ALog.i(TAG, "dequeueInputBuffer:" + mCurrentInputInfo.time + ";bufferIndex:" + mCurrentInputInfo.inputIndex + ";inputSize:" + mInputBuffers.size() + ";" + mType);
-        //}
-        return mCurrentInputInfo;
-    }
-
-    @Override
     public void queueInputBuffer(InputInfo inputInfo) {
-        if (mDecoder != null) {
-            if (inputInfo != null) {
-                //ALog.i(TAG, "queueInputBuffer,time:" + inputInfo.time + ";size:" + inputInfo.size + ";flag:" + inputInfo.lastFrameFlag + ";index:" + inputInfo.inputIndex + ";" + mType);
-                mDecoder.queueInputBuffer(inputInfo.inputIndex, 0, inputInfo.size <= 0 ? 0 : inputInfo.size,
-                        inputInfo.time <= 0 ? 0 : inputInfo.time, inputInfo.lastFrameFlag ? MediaCodec.BUFFER_FLAG_END_OF_STREAM : 0);
-                if (mCurrentInputInfo != null && mCurrentInputInfo.inputIndex == inputInfo.inputIndex) {
-                    mCurrentInputInfo = null;
-                }
-            } else {
-                mInputBuffers.offerFirst(new InputInfo(-1, null));
-            }
+        if (mDecoder == null || inputInfo == null) {
+            return;
         }
+        mDecoder.queueInputBuffer(inputInfo.inputIndex, 0, inputInfo.size <= 0 ? 0 : inputInfo.size,
+                inputInfo.time <= 0 ? 0 : inputInfo.time, inputInfo.lastFrameFlag ? MediaCodec.BUFFER_FLAG_END_OF_STREAM : 0);
     }
 
-    @Override
-    public FrameInfo dequeueOutputBuffer() {
-        if (mDecoder == null) {
-            return null;
-        }
-        if (mCurrentFrameInfo != null) {
-            //保证外部必须先返回上一个buffer,才能取走下一个buffer
-            //ALog.i(TAG, "dequeueOutputBuffer same frame again");
-            return null;
-        }
-        try {
-            mCurrentFrameInfo = mOutputBuffers.takeLast();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-        //if (mCurrentFrameInfo != null) {
-        //ALog.i(TAG, "dequeueOutputBuffer:" + mCurrentFrameInfo.presentationTimeUs + ";bufferIndex:" + mCurrentFrameInfo.outputIndex + ";" + mType);
-        //}
-        return mCurrentFrameInfo;
-    }
-
-    @Override
     public void queueOutputBuffer(FrameInfo frameInfo) {
-        if (mDecoder != null) {
-            if (frameInfo != null) {
-                mDecoder.releaseOutputBuffer(frameInfo.outputIndex, false);
-                if (mCurrentFrameInfo != null && mCurrentFrameInfo.outputIndex == frameInfo.outputIndex) {
-                    mCurrentFrameInfo = null;
-                }
-            } else {
-                mOutputBuffers.offerFirst(new FrameInfo(null, -1, -1, -1));
-            }
+        if (mDecoder == null || frameInfo == null) {
+            return;
         }
+        mDecoder.releaseOutputBuffer(frameInfo.outputIndex, false);
     }
 
     private MediaCodec.Callback mCallback = new MediaCodec.Callback() {
@@ -186,11 +120,11 @@ public class SvMediaDecoder implements IDecoder, IAudioParams, IVideoParams {
         @Override
         public void onInputBufferAvailable(MediaCodec codec, int index) {
             if (index >= 0) {
-                try {
-                    //ALog.i(TAG, "onInputBufferAvailable,index:" + index + ";" + mType);
-                    mInputBuffers.putFirst(new InputInfo(index, codec.getInputBuffer(index)));
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+                //ALog.i(TAG, "onInputBufferAvailable,index:" + index + ";" + mType);
+                if (mCounsumer != null) {
+                    mCounsumer.queueInputBuffer(new InputInfo(index, codec.getInputBuffer(index)));
+                } else {
+                    codec.queueInputBuffer(index, 0, 0, 0, 0);
                 }
             } else {
                 ALog.i(TAG, "onInputBufferAvailable:" + index);
@@ -210,10 +144,10 @@ public class SvMediaDecoder implements IDecoder, IAudioParams, IVideoParams {
                             info.presentationTimeUs, mSampleRate, mChannelCount);
                 }
                 if (frameInfo != null) {
-                    try {
-                        mOutputBuffers.putFirst(frameInfo);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
+                    if (mCounsumer != null) {
+                        mCounsumer.queueOutputBuffer(frameInfo);
+                    } else {
+                        codec.releaseOutputBuffer(index, false);
                     }
                 }
             } else {
@@ -230,7 +164,7 @@ public class SvMediaDecoder implements IDecoder, IAudioParams, IVideoParams {
         }
 
         @Override
-        public void onOutputFormatChanged(MediaCodec codec,MediaFormat format) {
+        public void onOutputFormatChanged(MediaCodec codec, MediaFormat format) {
             mOutputFormat = format;
             if (mOutputFormat != null) {
                 if (mOutputFormat.containsKey(MediaFormat.KEY_WIDTH))

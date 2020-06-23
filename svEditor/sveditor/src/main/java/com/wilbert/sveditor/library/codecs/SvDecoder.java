@@ -2,14 +2,17 @@ package com.wilbert.sveditor.library.codecs;
 
 import android.media.MediaFormat;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
 
 import com.wilbert.sveditor.library.codecs.abs.FrameInfo;
 import com.wilbert.sveditor.library.codecs.abs.IDecoder;
+import com.wilbert.sveditor.library.codecs.abs.IDecoderListener;
 import com.wilbert.sveditor.library.codecs.abs.InputInfo;
 
 import java.io.IOException;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -19,8 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * desc   :
  */
 public class SvDecoder implements IDecoder {
-
-    IDecoder mDecoder;
+    private final String TAG = "SvDecoder";
 
     public static int STATUS_RELEASED = 0x00;
     public static int STATUS_RELEASING = 0x01;
@@ -32,10 +34,20 @@ public class SvDecoder implements IDecoder {
     public static int STATUS_STARTED = 0x07;
 
     private AtomicInteger mStatus = new AtomicInteger(STATUS_RELEASED);
+    private Object mLock = new Object();
 
+    private SvMediaDecoder mDecoder;
+    private IDecoderListener mListener;
+    private MediaFormat mFormat;
+    private LinkedBlockingDeque<InputInfo> mInputBuffers = new LinkedBlockingDeque<>(10);
+    private LinkedBlockingDeque<FrameInfo> mOutputBuffers = new LinkedBlockingDeque<>(10);
+    private DecodeHandler mHandler;
 
-    public SvDecoder(Object lock) {
-        mDecoder = new SvMediaDecoder();
+    public SvDecoder() {
+        HandlerThread thread = new HandlerThread(TAG);
+        thread.start();
+        mHandler = new DecodeHandler(thread.getLooper());
+        mHandler.sendEmptyMessage(MSG_PREPARE_DECODER);
     }
 
     @Override
@@ -44,32 +56,76 @@ public class SvDecoder implements IDecoder {
     }
 
     @Override
-    public boolean prepare(MediaFormat format, Object lock) throws IOException {
-        return false;
+    public boolean isPrepared() {
+        return mStatus.get() >= STATUS_PREPARED;
+    }
+
+    @Override
+    public boolean prepare(MediaFormat format) throws IOException {
+        synchronized (mLock) {
+            mStatus.set(STATUS_PREPARING_DECODER);
+            mFormat = format;
+            mLock.notifyAll();
+            return true;
+        }
     }
 
     @Override
     public InputInfo dequeueInputBuffer() {
-        return null;
+        if (mDecoder == null) {
+            return null;
+        }
+        InputInfo result = null;
+        try {
+            result = mInputBuffers.takeLast();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        return result;
     }
 
     @Override
     public void queueInputBuffer(InputInfo inputInfo) {
-
+        if (mDecoder == null) {
+            return;
+        }
+        if (inputInfo != null) {
+            mDecoder.queueInputBuffer(inputInfo);
+        } else {
+            mInputBuffers.offerFirst(new InputInfo(-1, null));
+        }
     }
 
     @Override
     public FrameInfo dequeueOutputBuffer() {
-        return null;
+        if (mDecoder == null) {
+            return null;
+        }
+        FrameInfo result = null;
+        try {
+            result = mOutputBuffers.takeLast();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        return result;
     }
 
     @Override
     public void queueOutputBuffer(FrameInfo frameInfo) {
-
+        if (mDecoder == null) {
+            return;
+        }
+        if (frameInfo != null) {
+            mDecoder.queueOutputBuffer(frameInfo);
+        } else {
+            mOutputBuffers.offerFirst(new FrameInfo(null, -1, -1, -1));
+        }
     }
 
     @Override
     public boolean flush() {
+        mInputBuffers.clear();
+        mOutputBuffers.clear();
         return false;
     }
 
@@ -92,14 +148,18 @@ public class SvDecoder implements IDecoder {
             switch (msg.what) {
                 case MSG_PREPARE_DECODER:
                     try {
-                        mDecoder = new SvMediaDecoder();
-                        mStatus.set(STATUS_PREPARING_DECODER);
-                        mDecodePhore.acquire();
+                        mDecoder = new SvMediaDecoder(SvDecoder.this);
+                        if (mFormat == null) {
+                            synchronized (mLock) {
+                                mLock.wait();
+                            }
+                        }
                         if (mFormat != null) {
                             mDecoder.prepare(mFormat);
                         }
                     } catch (InterruptedException | IOException e) {
                         e.printStackTrace();
+                        notifyonError(e);
                     }
                     mStatus.set(STATUS_PREPARED);
                     notifyPrepared();
@@ -113,16 +173,43 @@ public class SvDecoder implements IDecoder {
                 public void run() {
                     if (mDecoder != null) {
                         mDecoder.release();
-                        mReleasePhore.release(1);
-                        if (mReleasePhore.availablePermits() <= 0) {
-                            mStatus.set(STATUS_RELEASED);
-                            notifyReleased();
-                        }
                         mDecoder = null;
                     }
+                    mStatus.set(STATUS_RELEASED);
+                    notifyReleased();
                     getLooper().quit();
                 }
             });
+        }
+    }
+
+    public void setListener(IDecoderListener listener) {
+        synchronized (mLock) {
+            mListener = listener;
+        }
+    }
+
+    private void notifyPrepared() {
+        synchronized (mLock) {
+            if (mListener != null) {
+                mListener.onPrepared(SvDecoder.this);
+            }
+        }
+    }
+
+    private void notifyonError(Throwable throwable) {
+        synchronized (mLock) {
+            if (mListener != null) {
+                mListener.onError(SvDecoder.this, throwable);
+            }
+        }
+    }
+
+    private void notifyReleased() {
+        synchronized (mLock) {
+            if (mListener != null) {
+                mListener.onReleased(SvDecoder.this);
+            }
         }
     }
 }

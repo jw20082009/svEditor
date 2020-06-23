@@ -130,7 +130,10 @@ public class SvExtractor {
                     try {
                         if (!TextUtils.isEmpty(filepath)) {
                             mExtractor = new SvMediaExtractor();
-                            mExtractor._prepare(filepath, type);
+                            MediaFormat format = mExtractor._prepare(filepath, type);
+                            synchronized (mLock) {
+                                mFormat = format;
+                            }
                         } else {
                             return;
                         }
