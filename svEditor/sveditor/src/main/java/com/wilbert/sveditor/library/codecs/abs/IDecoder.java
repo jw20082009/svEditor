@@ -12,11 +12,6 @@ import java.io.IOException;
  */
 public interface IDecoder {
 
-    int STATUS_RELEASED = 0X00;
-    int STATUS_RELEASING = 0X01;
-    int STATUS_PREPARING = 0X02;
-    int STATUS_PREPARED = 0x03;
-
     boolean isPrepared();
 
     boolean prepare(MediaFormat format) throws IOException;
@@ -27,7 +22,7 @@ public interface IDecoder {
 
     FrameInfo dequeueOutputBuffer();
 
-    void queueOutputBuffer(FrameInfo frameInfo);
+    void releaseOutputBuffer(FrameInfo frameInfo);
 
     int getStatus();
 

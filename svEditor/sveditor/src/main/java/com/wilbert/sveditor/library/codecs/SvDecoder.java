@@ -26,12 +26,8 @@ public class SvDecoder implements IDecoder {
 
     public static int STATUS_RELEASED = 0x00;
     public static int STATUS_RELEASING = 0x01;
-    public static int STATUS_PREPARING = 0x02;
-    public static int STATUS_PREPARING_EXTRACTOR = 0x03;
     public static int STATUS_PREPARING_DECODER = 0x04;
     public static int STATUS_PREPARED = 0x05;
-    public static int STATUS_STARTING = 0x06;
-    public static int STATUS_STARTED = 0x07;
 
     private AtomicInteger mStatus = new AtomicInteger(STATUS_RELEASED);
     private Object mLock = new Object();
@@ -62,6 +58,8 @@ public class SvDecoder implements IDecoder {
 
     @Override
     public boolean prepare(MediaFormat format) throws IOException {
+        if (mStatus.get() >= STATUS_PREPARING_DECODER)
+            return true;
         synchronized (mLock) {
             mStatus.set(STATUS_PREPARING_DECODER);
             mFormat = format;
@@ -111,7 +109,7 @@ public class SvDecoder implements IDecoder {
     }
 
     @Override
-    public void queueOutputBuffer(FrameInfo frameInfo) {
+    public void releaseOutputBuffer(FrameInfo frameInfo) {
         if (mDecoder == null) {
             return;
         }
@@ -122,16 +120,30 @@ public class SvDecoder implements IDecoder {
         }
     }
 
+    void offerInputInfo(InputInfo inputInfo) {
+        mInputBuffers.offerFirst(inputInfo == null ? new InputInfo(-1, null) : inputInfo);
+    }
+
+    void offerFrameInfo(FrameInfo frameInfo) {
+        mOutputBuffers.offerFirst(frameInfo == null ? new FrameInfo(null, -1, -1, -1) : frameInfo);
+    }
+
     @Override
     public boolean flush() {
+        if (mStatus.get() <= STATUS_PREPARED) {
+            return false;
+        }
         mInputBuffers.clear();
         mOutputBuffers.clear();
-        return false;
+        return true;
     }
 
     @Override
     public void release() {
-
+        if (mStatus.get() <= STATUS_RELEASING)
+            return;
+        mStatus.set(STATUS_RELEASING);
+        mHandler.release();
     }
 
     private final int MSG_PREPARE_DECODER = 0x01;

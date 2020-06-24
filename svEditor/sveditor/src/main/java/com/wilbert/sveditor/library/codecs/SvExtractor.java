@@ -155,7 +155,7 @@ public class SvExtractor {
                     synchronized (mLock) {
                         localDecoder = mDecoder;
                     }
-                    if (localDecoder != null && localDecoder.getStatus() >= IDecoder.STATUS_PREPARING) {
+                    if (localDecoder != null && localDecoder.isPrepared()) {
                         InputInfo inputInfo = localDecoder.dequeueInputBuffer();
                         if (inputInfo != null && inputInfo.buffer != null) {
                             long time = mExtractor._fillBuffer(inputInfo);
@@ -182,7 +182,7 @@ public class SvExtractor {
                     synchronized (mLock) {
                         localDecoder = mDecoder;
                     }
-                    if (localDecoder != null && localDecoder.getStatus() >= IDecoder.STATUS_PREPARING) {
+                    if (localDecoder != null && localDecoder.isPrepared()) {
                         localDecoder.flush();
                     }
                 }

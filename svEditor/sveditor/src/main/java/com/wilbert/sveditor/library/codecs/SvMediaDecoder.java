@@ -122,7 +122,7 @@ public class SvMediaDecoder implements IAudioParams, IVideoParams {
             if (index >= 0) {
                 //ALog.i(TAG, "onInputBufferAvailable,index:" + index + ";" + mType);
                 if (mCounsumer != null) {
-                    mCounsumer.queueInputBuffer(new InputInfo(index, codec.getInputBuffer(index)));
+                    mCounsumer.offerInputInfo(new InputInfo(index, codec.getInputBuffer(index)));
                 } else {
                     codec.queueInputBuffer(index, 0, 0, 0, 0);
                 }
@@ -145,7 +145,7 @@ public class SvMediaDecoder implements IAudioParams, IVideoParams {
                 }
                 if (frameInfo != null) {
                     if (mCounsumer != null) {
-                        mCounsumer.queueOutputBuffer(frameInfo);
+                        mCounsumer.offerFrameInfo(frameInfo);
                     } else {
                         codec.releaseOutputBuffer(index, false);
                     }
