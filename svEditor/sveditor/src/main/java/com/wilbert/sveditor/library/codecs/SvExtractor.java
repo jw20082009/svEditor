@@ -8,6 +8,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.text.TextUtils;
 
+import com.wilbert.sveditor.library.codecs.abs.FrameInfo;
 import com.wilbert.sveditor.library.codecs.abs.IDecoder;
 import com.wilbert.sveditor.library.codecs.abs.IExtractor;
 import com.wilbert.sveditor.library.codecs.abs.IExtractorListener;
@@ -43,11 +44,23 @@ public class SvExtractor {
     public static int STATUS_STARTED = 0x06;
 
     private AtomicInteger mStatus = new AtomicInteger(STATUS_RELEASED);
-    private IDecoder mDecoder;
+    private SvDecoder mDecoder;
     private IExtractorListener mListener;
     private Object mLock = new Object();
 
+    private int mFps = 0;
+    private int mBitRate = 0;
+    private int mWidth = 0;
+    private int mHeight = 0;
+    private int mRotation = 0;
+    private int mChannelCount = 0;
+    private int mSampleRate = 0;
+    private long mDuration = 0;
+
     public SvExtractor() {
+        synchronized (mLock) {
+            mDecoder = new SvDecoder();
+        }
     }
 
     public void setExtractorListener(IExtractorListener listener) {
@@ -73,10 +86,7 @@ public class SvExtractor {
         prepareMessage.sendToTarget();
     }
 
-    public void start(IDecoder decoder) {
-        synchronized (mLock) {
-            mDecoder = decoder;
-        }
+    public void start() {
         if (mStatus.get() < STATUS_PREPARING) {
             return;
         }
@@ -84,6 +94,35 @@ public class SvExtractor {
             mHandler.sendEmptyMessage(MSG_FEED_BUFFER);
         }
         mStatus.set(STATUS_STARTED);
+    }
+
+    public FrameInfo getNextFrameBuffer() {
+        if (mStatus.get() < STATUS_PREPARING_DECODER)
+            return null;
+        FrameInfo frameInfo = mDecoder.dequeueOutputBuffer();
+        if (!mHandler.hasMessages(MSG_FEED_BUFFER)) {
+            mHandler.sendEmptyMessage(MSG_FEED_BUFFER);
+        }
+        return frameInfo;
+    }
+
+    public void releaseFrameBuffer(FrameInfo frameInfo) {
+        if (mStatus.get() < STATUS_PREPARED || frameInfo == null)
+            return;
+        mDecoder.releaseOutputBuffer(frameInfo);
+    }
+
+    public void seekTo(long timeUs) {
+        if (mStatus.get() < STATUS_PREPARED) {
+            return;
+        }
+        mHandler.removeMessages(MSG_FEED_BUFFER);
+        mHandler.removeMessages(MSG_SEEK);
+        Message seekMessage = mHandler.obtainMessage(MSG_SEEK);
+        seekMessage.obj = timeUs;
+        seekMessage.sendToTarget();
+        mHandler.removeMessages(MSG_FEED_BUFFER);
+        mHandler.sendEmptyMessage(MSG_FEED_BUFFER);
     }
 
     public void release() {
@@ -133,6 +172,8 @@ public class SvExtractor {
                             MediaFormat format = mExtractor._prepare(filepath, type);
                             synchronized (mLock) {
                                 mFormat = format;
+                                initParams(mFormat);
+                                mDecoder.prepare(format);
                             }
                         } else {
                             return;
@@ -151,7 +192,7 @@ public class SvExtractor {
                     if (firstFrame) {
                         firstFrame = false;
                     }
-                    IDecoder localDecoder = null;
+                    SvDecoder localDecoder = null;
                     synchronized (mLock) {
                         localDecoder = mDecoder;
                     }
@@ -178,7 +219,7 @@ public class SvExtractor {
                         seekTimeUs = (long) tag;
                     }
                     mExtractor._seekTo(seekTimeUs);
-                    IDecoder localDecoder = null;
+                    SvDecoder localDecoder = null;
                     synchronized (mLock) {
                         localDecoder = mDecoder;
                     }
@@ -225,5 +266,26 @@ public class SvExtractor {
                 mListener.onReleased(SvExtractor.this);
             }
         }
+    }
+
+    private void initParams(MediaFormat format) {
+        if (format == null)
+            return;
+        if (format.containsKey(MediaFormat.KEY_WIDTH))
+            mWidth = format.getInteger(MediaFormat.KEY_WIDTH);
+        if (format.containsKey(MediaFormat.KEY_HEIGHT))
+            mHeight = format.getInteger(MediaFormat.KEY_HEIGHT);
+        if (format.containsKey(MediaFormat.KEY_ROTATION))
+            mRotation = format.getInteger(MediaFormat.KEY_ROTATION);
+        if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT))
+            mChannelCount = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
+        if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE))
+            mSampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE);
+        if (format.containsKey(MediaFormat.KEY_FRAME_RATE))
+            mFps = format.getInteger(MediaFormat.KEY_FRAME_RATE);
+        if (format.containsKey(MediaFormat.KEY_BIT_RATE))
+            mBitRate = format.getInteger(MediaFormat.KEY_BIT_RATE);
+        if (format.containsKey(MediaFormat.KEY_DURATION))
+            mDuration = format.getLong(MediaFormat.KEY_DURATION);
     }
 }

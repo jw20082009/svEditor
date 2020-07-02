@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * time   : 2020/05/22
  * desc   :
  */
-public class SvDecoder implements IDecoder {
+public class SvDecoder {
     private final String TAG = "SvDecoder";
 
     public static int STATUS_RELEASED = 0x00;
@@ -32,7 +32,7 @@ public class SvDecoder implements IDecoder {
     private AtomicInteger mStatus = new AtomicInteger(STATUS_RELEASED);
     private Object mLock = new Object();
 
-    private SvMediaDecoder mDecoder;
+    private IDecoder mDecoder;
     private IDecoderListener mListener;
     private MediaFormat mFormat;
     private LinkedBlockingDeque<InputInfo> mInputBuffers = new LinkedBlockingDeque<>(10);
@@ -46,17 +46,14 @@ public class SvDecoder implements IDecoder {
         mHandler.sendEmptyMessage(MSG_PREPARE_DECODER);
     }
 
-    @Override
     public int getStatus() {
         return mStatus.get();
     }
 
-    @Override
     public boolean isPrepared() {
         return mStatus.get() >= STATUS_PREPARED;
     }
 
-    @Override
     public boolean prepare(MediaFormat format) throws IOException {
         if (mStatus.get() >= STATUS_PREPARING_DECODER)
             return true;
@@ -68,7 +65,6 @@ public class SvDecoder implements IDecoder {
         }
     }
 
-    @Override
     public InputInfo dequeueInputBuffer() {
         if (mDecoder == null) {
             return null;
@@ -82,7 +78,6 @@ public class SvDecoder implements IDecoder {
         return result;
     }
 
-    @Override
     public void queueInputBuffer(InputInfo inputInfo) {
         if (mDecoder == null) {
             return;
@@ -94,7 +89,6 @@ public class SvDecoder implements IDecoder {
         }
     }
 
-    @Override
     public FrameInfo dequeueOutputBuffer() {
         if (mDecoder == null) {
             return null;
@@ -108,13 +102,12 @@ public class SvDecoder implements IDecoder {
         return result;
     }
 
-    @Override
     public void releaseOutputBuffer(FrameInfo frameInfo) {
         if (mDecoder == null) {
             return;
         }
         if (frameInfo != null) {
-            mDecoder.queueOutputBuffer(frameInfo);
+            mDecoder.releaseOutputBuffer(frameInfo);
         } else {
             mOutputBuffers.offerFirst(new FrameInfo(null, -1, -1, -1));
         }
@@ -128,7 +121,6 @@ public class SvDecoder implements IDecoder {
         mOutputBuffers.offerFirst(frameInfo == null ? new FrameInfo(null, -1, -1, -1) : frameInfo);
     }
 
-    @Override
     public boolean flush() {
         if (mStatus.get() <= STATUS_PREPARED) {
             return false;
@@ -138,7 +130,6 @@ public class SvDecoder implements IDecoder {
         return true;
     }
 
-    @Override
     public void release() {
         if (mStatus.get() <= STATUS_RELEASING)
             return;

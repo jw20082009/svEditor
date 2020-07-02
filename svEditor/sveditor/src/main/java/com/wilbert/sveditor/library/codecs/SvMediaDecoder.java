@@ -19,7 +19,7 @@ import java.util.concurrent.LinkedBlockingDeque;
  * time   : 2020/04/26
  * desc   :
  */
-public class SvMediaDecoder implements IAudioParams, IVideoParams {
+public class SvMediaDecoder implements IAudioParams, IVideoParams ,IDecoder{
     private final String TAG = "SvMediaDecoder";
     private MediaCodec mDecoder;
     private boolean mPrepared = false;
@@ -48,10 +48,12 @@ public class SvMediaDecoder implements IAudioParams, IVideoParams {
         mCounsumer = handle;
     }
 
+    @Override
     public boolean isPrepared() {
         return mPrepared;
     }
 
+    @Override
     public boolean prepare(MediaFormat format) throws IOException {
         ALog.i(TAG, "prepare:" + mPrepared);
         if (mPrepared && mDecoder != null) {
@@ -77,6 +79,7 @@ public class SvMediaDecoder implements IAudioParams, IVideoParams {
         return mPrepared = true;
     }
 
+    @Override
     public boolean flush() {
         ALog.i(TAG, "flush");
         if (mFlushEnable) {
@@ -88,6 +91,7 @@ public class SvMediaDecoder implements IAudioParams, IVideoParams {
         return false;
     }
 
+    @Override
     public void release() {
         ALog.i(TAG, "release");
         if (mDecoder != null) {
@@ -100,6 +104,7 @@ public class SvMediaDecoder implements IAudioParams, IVideoParams {
         }
     }
 
+    @Override
     public void queueInputBuffer(InputInfo inputInfo) {
         if (mDecoder == null || inputInfo == null) {
             return;
@@ -108,7 +113,8 @@ public class SvMediaDecoder implements IAudioParams, IVideoParams {
                 inputInfo.time <= 0 ? 0 : inputInfo.time, inputInfo.lastFrameFlag ? MediaCodec.BUFFER_FLAG_END_OF_STREAM : 0);
     }
 
-    public void queueOutputBuffer(FrameInfo frameInfo) {
+    @Override
+    public void releaseOutputBuffer(FrameInfo frameInfo) {
         if (mDecoder == null || frameInfo == null) {
             return;
         }

@@ -16,15 +16,9 @@ public interface IDecoder {
 
     boolean prepare(MediaFormat format) throws IOException;
 
-    InputInfo dequeueInputBuffer();
-
     void queueInputBuffer(InputInfo inputInfo);
 
-    FrameInfo dequeueOutputBuffer();
-
     void releaseOutputBuffer(FrameInfo frameInfo);
-
-    int getStatus();
 
     boolean flush();
 

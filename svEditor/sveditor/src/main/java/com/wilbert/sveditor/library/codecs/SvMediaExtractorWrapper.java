@@ -36,7 +36,6 @@ public class SvMediaExtractorWrapper implements IMediaExtractor, IAudioParams, I
 
     private AtomicInteger mStatus = new AtomicInteger(STATUS_RELEASED);
 
-    private DecodeHandler mDecodeHandler;
     private IExtractorListener mListener;
     private String mFilePath = null;
 
@@ -49,7 +48,7 @@ public class SvMediaExtractorWrapper implements IMediaExtractor, IAudioParams, I
     private int mSampleRate = 0;
     private long mDuration = 0;
 
-    private SvMediaDecoder mDecoder;
+    private SvDecoder mDecoder;
     private SvExtractor mExtractor;
     private Semaphore mReleasePhore = new Semaphore(2);
     private Semaphore mDecodePhore = new Semaphore(0);
@@ -58,7 +57,7 @@ public class SvMediaExtractorWrapper implements IMediaExtractor, IAudioParams, I
     public SvMediaExtractorWrapper() {
         mExtractor = new SvExtractor();
         mExtractor.setExtractorListener(mExtractorListener);
-        mDecoder = new SvMediaDecoder();
+
     }
 
     @Override
@@ -69,9 +68,6 @@ public class SvMediaExtractorWrapper implements IMediaExtractor, IAudioParams, I
         initHandler();
         mFilePath = filePath;
         mExtractor.prepare(filePath, type);
-        mDecodeHandler.removeMessages(MSG_PREPARE_DECODER);
-        Message decodeMessage = mDecodeHandler.obtainMessage(MSG_PREPARE_DECODER);
-        decodeMessage.sendToTarget();
     }
 
     @Override
@@ -311,45 +307,24 @@ public class SvMediaExtractorWrapper implements IMediaExtractor, IAudioParams, I
     IExtractorListener mExtractorListener = new IExtractorListener() {
         @Override
         public void onPrepared(SvExtractor extractor) {
-            initParams(extractor.getMediaFormat());
-            mDecodePhore.release(1);
+            MediaFormat format = extractor.getMediaFormat();
+            try {
+                mDecoder.prepare(format);
+                initParams(format);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
 
         @Override
         public void onReleased(SvExtractor extractor) {
-
         }
 
         @Override
         public void onError(SvExtractor extractor, Throwable throwable) {
-
         }
     };
 
-    private void initParams(MediaFormat format) {
-        synchronized (mLock) {
-            if (format == null)
-                return;
-            format = mExtractor.getMediaFormat();
-            if (format != null) {
-                if (format.containsKey(MediaFormat.KEY_WIDTH))
-                    mWidth = format.getInteger(MediaFormat.KEY_WIDTH);
-                if (format.containsKey(MediaFormat.KEY_HEIGHT))
-                    mHeight = format.getInteger(MediaFormat.KEY_HEIGHT);
-                if (format.containsKey(MediaFormat.KEY_ROTATION))
-                    mRotation = format.getInteger(MediaFormat.KEY_ROTATION);
-                if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT))
-                    mChannelCount = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
-                if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE))
-                    mSampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE);
-                if (format.containsKey(MediaFormat.KEY_FRAME_RATE))
-                    mFps = format.getInteger(MediaFormat.KEY_FRAME_RATE);
-                if (format.containsKey(MediaFormat.KEY_BIT_RATE))
-                    mBitRate = format.getInteger(MediaFormat.KEY_BIT_RATE);
-                if (format.containsKey(MediaFormat.KEY_DURATION))
-                    mDuration = format.getLong(MediaFormat.KEY_DURATION);
-            }
-        }
-    }
+
 }
 
